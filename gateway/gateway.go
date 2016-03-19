@@ -20,6 +20,8 @@ const (
 	// Etcd use "/v2/keys" for its http v2 prefix, so
 	// here we use /v3/keys.
 	keysPrefix = "/v3/keys"
+
+	contentTypeKey = "Content-Type"
 )
 
 type Gateway struct {
@@ -66,9 +68,9 @@ func (gw *Gateway) handleKeys(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		err = gw.handleGetKeys(w, r)
+		err = gw.handleKeysGet(w, r)
 	case http.MethodPut, http.MethodPost:
-		err = gw.handlePutKeys(w, r)
+		err = gw.handleKeysPut(w, r)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -81,7 +83,24 @@ func (gw *Gateway) handleKeys(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (gw *Gateway) handleGetKeys(w http.ResponseWriter, r *http.Request) error {
+func writeResponse(w http.ResponseWriter, r *http.Request, resp interface{}) error {
+	contentType := r.Header.Get(contentTypeKey)
+
+	// TODO: check application/x-protobuf and return protobuf format.
+	// use json for default
+	value, err := json.Marshal(resp)
+
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	w.Header().Set(contentTypeKey, contentType)
+	w.Write(value)
+
+	return nil
+}
+
+func (gw *Gateway) handleKeysGet(w http.ResponseWriter, r *http.Request) error {
 	key := strings.TrimPrefix(r.URL.Path, keysPrefix)
 
 	kv := clientv3.KV(gw.client)
@@ -102,18 +121,11 @@ func (gw *Gateway) handleGetKeys(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	// TODO: use content type for response, now we use json default.
-	value, err := json.Marshal(resp)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	w.Write(value)
-
+	writeResponse(w, r, resp)
 	return nil
 }
 
-func (gw *Gateway) handlePutKeys(w http.ResponseWriter, r *http.Request) error {
+func (gw *Gateway) handleKeysPut(w http.ResponseWriter, r *http.Request) error {
 	key := strings.TrimPrefix(r.URL.Path, keysPrefix)
 
 	val, err := ioutil.ReadAll(r.Body)
@@ -140,11 +152,6 @@ func (gw *Gateway) handlePutKeys(w http.ResponseWriter, r *http.Request) error {
 		return errors.Errorf("put value for key %q failed", key)
 	}
 
-	value, err := json.Marshal(resp)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
-	w.Write(value)
+	writeResponse(w, r, resp)
 	return nil
 }
