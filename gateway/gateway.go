@@ -24,11 +24,13 @@ const (
 	contentTypeKey = "Content-Type"
 )
 
+// Gateway is a HTTP gateway to communicate with Etcd with v3 protocol.
 type Gateway struct {
 	cfg    *Config
 	client *clientv3.Client
 }
 
+// NewGateway creates the gateway.
 func NewGateway(cfg *Config) (*Gateway, error) {
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   cfg.EtcdAddrs,
@@ -47,6 +49,7 @@ func NewGateway(cfg *Config) (*Gateway, error) {
 	return gw, nil
 }
 
+// Run runs the gateway server.
 func (gw *Gateway) Run() error {
 	mux := http.NewServeMux()
 
