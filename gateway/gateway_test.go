@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"testing"
 
@@ -46,22 +48,33 @@ func (s *testGatewaySuite) TearDownSuite(c *C) {
 
 }
 
-func getURL(key string) string {
-	return fmt.Sprintf("http://%s%s/%s", *addr, keysPrefix, key)
+func getKey(key string) string {
+	return path.Join(keysPrefix, "test_gateway", key)
 }
 
-func (s *testGatewaySuite) TestPutGet(c *C) {
-	url := getURL("foo")
+func getURL(key string, params url.Values) string {
+	key = getKey(key)
 
-	value := "hello world"
-	resp, err := http.Post(url, "application/octet-stream", strings.NewReader(value))
+	if len(params) == 0 {
+		return fmt.Sprintf("http://%s%s", *addr, key)
+	}
+
+	return fmt.Sprintf("http://%s%s?%s", *addr, key, params.Encode())
+}
+
+const bodyType = "application/octet-stream"
+
+func testPut(c *C, url string, value string) {
+	resp, err := http.Post(url, bodyType, strings.NewReader(value))
 	c.Assert(err, IsNil)
 
 	_, err = ioutil.ReadAll(resp.Body)
 	c.Assert(err, IsNil)
 	resp.Body.Close()
+}
 
-	resp, err = http.Get(url)
+func testGet(c *C, url string) *clientv3.GetResponse {
+	resp, err := http.Get(url)
 	c.Assert(err, IsNil)
 
 	data, err := ioutil.ReadAll(resp.Body)
@@ -70,8 +83,43 @@ func (s *testGatewaySuite) TestPutGet(c *C) {
 
 	msg := clientv3.GetResponse{}
 	err = json.Unmarshal(data, &msg)
-	c.Assert(err, IsNil)
+	c.Assert(err, IsNil, Commentf("%q", data))
+	return &msg
+}
+
+func (s *testGatewaySuite) TestPutGet(c *C) {
+	url := getURL("a", nil)
+
+	value := "hello world"
+	testPut(c, url, value)
+
+	msg := testGet(c, url)
 
 	c.Assert(msg.Kvs, HasLen, 1)
 	c.Assert(string(msg.Kvs[0].Value), Equals, value)
+}
+
+func (s *testGatewaySuite) TestGetOptions(c *C) {
+	testPut(c, getURL("fooa", nil), "bara")
+	testPut(c, getURL("foob", nil), "barb")
+	testPut(c, getURL("fooaa", nil), "bar")
+
+	params := url.Values{}
+	params.Add("prefix", "true")
+	msg := testGet(c, getURL("foo", params))
+	c.Assert(msg.Kvs, HasLen, 3, Commentf("%+v", msg))
+
+	params = url.Values{}
+	params.Add("range-end", getKey("g"))
+	msg = testGet(c, getURL("foo", params))
+	c.Assert(msg.Kvs, HasLen, 3, Commentf("%+v", msg))
+
+	params = url.Values{}
+	params.Add("order", "desc")
+	params.Add("sort-by", "value")
+	params.Add("prefix", "true")
+	msg = testGet(c, getURL("foo", params))
+	c.Assert(msg.Kvs, HasLen, 3)
+	c.Assert(string(msg.Kvs[0].Value), Equals, "barb")
+	c.Assert(string(msg.Kvs[2].Value), Equals, "bar")
 }
