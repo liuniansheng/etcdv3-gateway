@@ -20,7 +20,7 @@ func TestServer(t *testing.T) {
 var _ = Suite(&testGatewaySuite{})
 
 var (
-	addr     = flag.String("addr", "127.0.0.1:8080", "Gateway HTTP listening address")
+	addr     = flag.String("addr", "127.0.0.1:20168", "Gateway HTTP listening address")
 	testEtcd = flag.String("etcd", "127.0.0.1:2378", "Etcd gPRC endpoints, separated by comma")
 )
 

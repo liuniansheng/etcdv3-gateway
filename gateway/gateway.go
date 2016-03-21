@@ -49,8 +49,10 @@ func NewGateway(cfg *Config) (*Gateway, error) {
 
 func (gw *Gateway) Run() error {
 	mux := http.NewServeMux()
-	mux.HandleFunc(keysPrefix, gw.handleKeys)
-	mux.HandleFunc(keysPrefix+"/", gw.handleKeys)
+
+	keysHandler := &keysHandler{gw: gw}
+	mux.Handle(keysPrefix, keysHandler)
+	mux.Handle(keysPrefix+"/", keysHandler)
 
 	s := &http.Server{
 		Addr:         gw.cfg.Addr,
@@ -61,26 +63,6 @@ func (gw *Gateway) Run() error {
 
 	err := s.ListenAndServe()
 	return errors.Trace(err)
-}
-
-func (gw *Gateway) handleKeys(w http.ResponseWriter, r *http.Request) {
-	var err error
-
-	switch r.Method {
-	case http.MethodGet:
-		err = gw.handleKeysGet(w, r)
-	case http.MethodPut, http.MethodPost:
-		err = gw.handleKeysPut(w, r)
-	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(err.Error()))
-		return
-	}
 }
 
 func writeResponse(w http.ResponseWriter, r *http.Request, resp interface{}) error {
@@ -100,7 +82,33 @@ func writeResponse(w http.ResponseWriter, r *http.Request, resp interface{}) err
 	return nil
 }
 
-func (gw *Gateway) handleKeysGet(w http.ResponseWriter, r *http.Request) error {
+type keysHandler struct {
+	gw *Gateway
+}
+
+func (h *keysHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var err error
+
+	switch r.Method {
+	case http.MethodGet:
+		err = h.Get(w, r)
+	case http.MethodPut, http.MethodPost:
+		err = h.Put(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+}
+
+func (h *keysHandler) Get(w http.ResponseWriter, r *http.Request) error {
+	gw := h.gw
+
 	key := strings.TrimPrefix(r.URL.Path, keysPrefix)
 
 	kv := clientv3.KV(gw.client)
@@ -125,7 +133,9 @@ func (gw *Gateway) handleKeysGet(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (gw *Gateway) handleKeysPut(w http.ResponseWriter, r *http.Request) error {
+func (h *keysHandler) Put(w http.ResponseWriter, r *http.Request) error {
+	gw := h.gw
+
 	key := strings.TrimPrefix(r.URL.Path, keysPrefix)
 
 	val, err := ioutil.ReadAll(r.Body)
