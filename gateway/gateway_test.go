@@ -49,17 +49,17 @@ func (s *testGatewaySuite) TearDownSuite(c *C) {
 }
 
 func getKey(key string) string {
-	return path.Join(keysPrefix, "test_gateway", key)
+	return path.Join("/test_gateway", key)
 }
 
 func getURL(key string, params url.Values) string {
 	key = getKey(key)
 
 	if len(params) == 0 {
-		return fmt.Sprintf("http://%s%s", *addr, key)
+		return fmt.Sprintf("http://%s%s%s", *addr, keysPrefix, key)
 	}
 
-	return fmt.Sprintf("http://%s%s?%s", *addr, key, params.Encode())
+	return fmt.Sprintf("http://%s%s%s?%s", *addr, keysPrefix, key, params.Encode())
 }
 
 const bodyType = "application/octet-stream"
