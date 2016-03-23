@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/context"
 
 	"github.com/coreos/etcd/clientv3"
+	"github.com/gorilla/schema"
 	"github.com/juju/errors"
 )
 
@@ -85,6 +86,13 @@ func writeResponse(w http.ResponseWriter, r *http.Request, resp interface{}) err
 	return nil
 }
 
+// Schema decoder can be used safely in multi goroutines.
+var decoder = schema.NewDecoder()
+
+func init() {
+	decoder.IgnoreUnknownKeys(true)
+}
+
 type keysHandler struct {
 	gw *Gateway
 }
@@ -109,6 +117,69 @@ func (h *keysHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+var sortOrderMap = map[string]clientv3.SortOrder{
+	"asc":  clientv3.SortAscend,
+	"desc": clientv3.SortDescend,
+	// Default is None sort.
+	"": clientv3.SortNone,
+}
+
+var sortByMap = map[string]clientv3.SortTarget{
+	"create":  clientv3.SortByCreatedRev,
+	"key":     clientv3.SortByKey,
+	"modify":  clientv3.SortByModifiedRev,
+	"value":   clientv3.SortByValue,
+	"version": clientv3.SortByVersion,
+	// Default is sort by key.
+	"": clientv3.SortByKey,
+}
+
+func (h *keysHandler) parseGetOptions(r *http.Request) ([]clientv3.OpOption, error) {
+	var opts []clientv3.OpOption
+
+	option := struct {
+		Limit    int64  `schema:"limit"`
+		Order    string `schema:"order"`
+		SortBy   string `schema:"sort-by"`
+		Prefix   bool   `schema:"prefix"`
+		RangeEnd string `schema:"range-end"`
+	}{}
+
+	if err := decoder.Decode(&option, r.Form); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	if len(option.RangeEnd) > 0 {
+		if option.Prefix {
+			return nil, errors.New("too many arguments for range with prefix, only need one")
+		}
+
+		opts = append(opts, clientv3.WithRange(option.RangeEnd))
+	}
+
+	if option.Limit > 0 {
+		opts = append(opts, clientv3.WithLimit(option.Limit))
+	}
+
+	order, ok := sortOrderMap[strings.ToLower(option.Order)]
+	if !ok {
+		return nil, errors.Errorf("bad sort order %v", option.Order)
+	}
+
+	sortBy, ok := sortByMap[strings.ToLower(option.SortBy)]
+	if !ok {
+		return nil, errors.Errorf("bad sort target %v", option.SortBy)
+	}
+
+	opts = append(opts, clientv3.WithSort(sortBy, order))
+
+	if option.Prefix {
+		opts = append(opts, clientv3.WithPrefix())
+	}
+
+	return opts, nil
+}
+
 func (h *keysHandler) Get(w http.ResponseWriter, r *http.Request) error {
 	gw := h.gw
 
@@ -116,8 +187,14 @@ func (h *keysHandler) Get(w http.ResponseWriter, r *http.Request) error {
 
 	kv := clientv3.KV(gw.client)
 
-	// TODO: parse url args and set there options.
-	var opts []clientv3.OpOption
+	if err := r.ParseForm(); err != nil {
+		return errors.Trace(err)
+	}
+
+	opts, err := h.parseGetOptions(r)
+	if err != nil {
+		return errors.Trace(err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	resp, err := kv.Get(ctx, key, opts...)
