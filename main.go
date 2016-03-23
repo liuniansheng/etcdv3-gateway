@@ -10,7 +10,7 @@ import (
 
 var (
 	addr      = flag.String("addr", ":20168", "Etcdv3 gateway HTTP listening address")
-	etcdAddrs = flag.String("etcd", "127.0.0.1:2378", "Etcd gPRC endpoints, separated by comma")
+	etcdAddrs = flag.String("etcd", "127.0.0.1:2379", "Etcd endpoints, separated by comma")
 )
 
 func main() {

@@ -23,7 +23,7 @@ var _ = Suite(&testGatewaySuite{})
 
 var (
 	addr     = flag.String("addr", "127.0.0.1:20168", "Gateway HTTP listening address")
-	testEtcd = flag.String("etcd", "127.0.0.1:2378", "Etcd gPRC endpoints, separated by comma")
+	testEtcd = flag.String("etcd", "127.0.0.1:2379", "Etcd endpoints, separated by comma")
 )
 
 type testGatewaySuite struct {
