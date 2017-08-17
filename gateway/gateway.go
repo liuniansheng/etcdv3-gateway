@@ -125,9 +125,9 @@ var sortOrderMap = map[string]clientv3.SortOrder{
 }
 
 var sortByMap = map[string]clientv3.SortTarget{
-	"create":  clientv3.SortByCreatedRev,
-	"key":     clientv3.SortByKey,
-	"modify":  clientv3.SortByModifiedRev,
+	 "create":  clientv3.SortByCreateRevision,
+        "key":     clientv3.SortByKey,
+        "modify":  clientv3.SortByModRevision,
 	"value":   clientv3.SortByValue,
 	"version": clientv3.SortByVersion,
 	// Default is sort by key.
